@@ -188,6 +188,14 @@ namespace StarDio
 
 		private void HandleUpdateTicking(object sender, UpdateTickingEventArgs evt)
 		{
+			if (!Context.IsWorldReady) {
+				return;
+			}
+
+			if (this.LastState.Value == null || this.CurrState.Value == null) {
+				return;
+			}
+
 			if (ModEntry.All != null && Context.IsOnHostComputer) {
 				TryUpdateAll();
 			}
