@@ -132,7 +132,7 @@ namespace StarDio
 		}
 
 		private void LogToChat(String s) {
-			Game1.chatBox.addInfoMessage(s);
+			//Game1.chatBox.addInfoMessage(s);
 		}
 
 		private void HandleSaveLoaded(object sender, SaveLoadedEventArgs evt)
@@ -204,10 +204,10 @@ namespace StarDio
 				TryUpdateAll();
 			}
 
-			if (Game1.shouldTimePass(true)) {
-				this.CurrState.Value.CanPause = true;
-			} else {
+			if (Game1.shouldTimePass(true) && (Game1.currentMinigame == null)) {
 				this.CurrState.Value.CanPause = false;
+			} else {
+				this.CurrState.Value.CanPause = true;
 			}
 
 			if (Game1.player.currentLocation is StardewValley.Locations.MineShaft &&
