@@ -131,6 +131,10 @@ namespace StarDio
 			helper.Events.Multiplayer.ModMessageReceived += HandleModMessageReceived;
 		}
 
+		private void LogToChat(String s) {
+			Game1.chatBox.addInfoMessage(s);
+		}
+
 		private void HandleSaveLoaded(object sender, SaveLoadedEventArgs evt)
 		{
 			this.LastState.Value = new SDPlayer();
@@ -188,7 +192,7 @@ namespace StarDio
 
 		private void HandleUpdateTicking(object sender, UpdateTickingEventArgs evt)
 		{
-			if (!Context.IsWorldReady) {
+			if (!Context.IsWorldReady || !Context.IsMultiplayer) {
 				return;
 			}
 
@@ -230,6 +234,8 @@ namespace StarDio
 						this.CurrState.Value.CanPause
 					);
 					this.Helper.Multiplayer.SendMessage(msg, "SDMessage", modIDs: new[] { this.ModManifest.UniqueID });
+
+					this.LogToChat($"[StarDio] SENT: ({this.CurrState.Value.InSkullCavern}, {this.CurrState.Value.InSkullCavern})");
 				}
 				return;
 			}
@@ -313,6 +319,8 @@ namespace StarDio
 			} else {
 				plr.CanPause = false;
 			}
+
+			this.LogToChat($"[StarDio] RECV: ({plr.InSkullCavern}, {plr.InSkullCavern})");
 		}
 
 		private static void UpdateGameClock_Prefix(GameTime time)
