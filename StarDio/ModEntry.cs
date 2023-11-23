@@ -235,7 +235,7 @@ namespace StarDio
 					);
 					this.Helper.Multiplayer.SendMessage(msg, "SDMessage", modIDs: new[] { this.ModManifest.UniqueID });
 
-					this.LogToChat($"[StarDio] SENT: ({this.CurrState.Value.InSkullCavern}, {this.CurrState.Value.InSkullCavern})");
+					this.LogToChat($"[StarDio] SENT: ({this.CurrState.Value.InSkullCavern}, {this.CurrState.Value.CanPause})");
 				}
 				return;
 			}
@@ -320,7 +320,7 @@ namespace StarDio
 				plr.CanPause = false;
 			}
 
-			this.LogToChat($"[StarDio] RECV: ({plr.InSkullCavern}, {plr.InSkullCavern})");
+			this.LogToChat($"[StarDio] RECV: ({plr.InSkullCavern}, {plr.CanPause})");
 		}
 
 		private static void UpdateGameClock_Prefix(GameTime time)
