@@ -8,16 +8,15 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 
-namespace StarDio
-{
-	internal sealed class ModEntry : Mod
-	{
+namespace StarDio {
+	internal sealed class ModEntry : Mod {
 		class SDPlayer {
 			public bool InSkullCavern;
 			public bool CanPause;
 			public bool Ticked;
 
-			public SDPlayer() {
+			public SDPlayer()
+			{
 				this.InSkullCavern = false;
 				this.CanPause = false;
 				this.Ticked = false;
@@ -28,12 +27,14 @@ namespace StarDio
 			public byte InSkullCavern;
 			public byte CanPause;
 
-			public SDMessage() {
+			public SDMessage()
+			{
 				this.InSkullCavern = 0;
 				this.CanPause = 0;
 			}
 
-			public SDMessage(bool inSkullCavern, bool canPause) {
+			public SDMessage(bool inSkullCavern, bool canPause)
+			{
 				if (inSkullCavern) {
 					this.InSkullCavern = 1;
 				} else {
@@ -52,17 +53,19 @@ namespace StarDio
 			public Dictionary<long, SDPlayer> Players;
 			public bool InSkullCavern;
 			public bool CanPause;
-			public bool Ticked;
+			public bool TickStarted;
 
-			public AllData() {
+			public AllData()
+			{
 				this.Players = new Dictionary<long, SDPlayer>();
 				this.Reset();
 			}
 
-			public void Reset() {
+			public void Reset()
+			{
 				this.InSkullCavern = false;
 				this.CanPause = false;
-				this.Ticked = false;
+				this.TickStarted = false;
 
 				foreach (KeyValuePair<long, SDPlayer> plr in this.Players) {
 					plr.Value.InSkullCavern = false;
@@ -71,18 +74,21 @@ namespace StarDio
 				}
 			}
 
-			public void RemovePlayer(long playerId) {
+			public void RemovePlayer(long playerId)
+			{
 				if (this.Players.ContainsKey(playerId)) {
 					this.Players.Remove(playerId);
 				}
 			}
 
-			public void AddPlayer(long playerId) {
+			public void AddPlayer(long playerId)
+			{
 				this.RemovePlayer(playerId);
 				this.Players.Add(playerId, new SDPlayer());
 			}
 
-			public SDPlayer GetPlayer(long playerId) {
+			public SDPlayer GetPlayer(long playerId)
+			{
 				if (!this.Players.ContainsKey(playerId)) {
 					return null;
 				}
@@ -131,7 +137,8 @@ namespace StarDio
 			helper.Events.Multiplayer.ModMessageReceived += HandleModMessageReceived;
 		}
 
-		private void LogToChat(String s) {
+		private void LogToChat(String s)
+		{
 			//Game1.chatBox.addInfoMessage(s);
 		}
 
@@ -164,11 +171,10 @@ namespace StarDio
 			ModEntry.All = null;
 		}
 
-		private void TryUpdateAll() {
-			foreach (KeyValuePair<int, SDPlayer> plr in this.LastState.GetActiveValues()) {
-				if (plr.Value.Ticked) {
-					return;
-				}
+		private void UpdateAll()
+		{
+			foreach (KeyValuePair<int, SDPlayer> plr in this.CurrState.GetActiveValues()) {
+				plr.Value.Ticked = false;
 			}
 			ModEntry.All.CanPause = true;
 			ModEntry.All.InSkullCavern = true;
@@ -200,8 +206,9 @@ namespace StarDio
 				return;
 			}
 
-			if (ModEntry.All != null && Context.IsOnHostComputer) {
-				TryUpdateAll();
+			if (ModEntry.All != null && !ModEntry.All.TickStarted) {
+				UpdateAll();
+				ModEntry.All.TickStarted = true;
 			}
 
 			if (Game1.shouldTimePass(true) && (Game1.currentMinigame == null)) {
@@ -246,9 +253,7 @@ namespace StarDio
 				}
 			}
 
-			foreach (KeyValuePair<int, SDPlayer> plr in this.LastState.GetActiveValues()) {
-				plr.Value.Ticked = false;
-			}
+			ModEntry.All.TickStarted = false;
 		}
 
 		private void HandlePeerConnected(object sender, PeerConnectedEventArgs evt)
