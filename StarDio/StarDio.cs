@@ -7,9 +7,10 @@ using StardewValley;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Reflection.Emit;
 
 namespace StarDio {
-	internal sealed class ModEntry : Mod {
+	internal sealed class StarDio : Mod {
 		class SDPlayer {
 			public bool InSkullCavern;
 			public bool CanPause;
@@ -23,17 +24,17 @@ namespace StarDio {
 			}
 		}
 
-		class SDMessage {
+		class ClientUpdate {
 			public byte InSkullCavern;
 			public byte CanPause;
 
-			public SDMessage()
+			public ClientUpdate()
 			{
 				this.InSkullCavern = 0;
 				this.CanPause = 0;
 			}
 
-			public SDMessage(bool inSkullCavern, bool canPause)
+			public ClientUpdate(bool inSkullCavern, bool canPause)
 			{
 				if (inSkullCavern) {
 					this.InSkullCavern = 1;
@@ -45,6 +46,24 @@ namespace StarDio {
 					this.CanPause = 1;
 				} else {
 					this.CanPause = 0;
+				}
+			}
+		}
+
+		class ServerUpdate {
+			public byte Paused;
+
+			public ServerUpdate()
+			{
+				this.Paused = 0;
+			}
+
+			public ServerUpdate(bool paused)
+			{
+				if (paused) {
+					this.Paused = 1;
+				} else {
+					this.Paused = 0;
 				}
 			}
 		}
@@ -103,9 +122,12 @@ namespace StarDio {
 		private readonly PerScreen<SDPlayer> LastState = new PerScreen<SDPlayer>(createNewState: () => null);
 		private readonly PerScreen<SDPlayer> CurrState = new PerScreen<SDPlayer>(createNewState: () => null);
 
+		private static bool Paused;
+
 		public override void Entry(IModHelper helper)
 		{
-			ModEntry.All = null;
+			StarDio.All = null;
+			StarDio.Paused = false;
 
 			var harmony = new Harmony(this.ModManifest.UniqueID);
 
@@ -115,14 +137,30 @@ namespace StarDio {
 					nameof(StardewValley.Game1.UpdateGameClock)
 				),
 				prefix: new HarmonyMethod(
-					typeof(ModEntry).GetMethod(
+					typeof(StarDio).GetMethod(
 						"UpdateGameClock_Prefix", 
 						BindingFlags.NonPublic | BindingFlags.Static
 					)
 				),
 				postfix: new HarmonyMethod(
-					typeof(ModEntry).GetMethod(
+					typeof(StarDio).GetMethod(
 						"UpdateGameClock_Postfix", 
+						BindingFlags.NonPublic | BindingFlags.Static
+					)
+				)
+			);
+
+			harmony.Patch(
+				original: AccessTools.Method(
+					typeof(StardewValley.Menus.DayTimeMoneyBox),
+					nameof(StardewValley.Menus.DayTimeMoneyBox.draw),
+					new Type[] {
+						typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch)
+					}
+				),
+				transpiler: new HarmonyMethod(
+					typeof(StarDio).GetMethod(
+						"DayTimeMoneyBox_Draw_Transpiler",
 						BindingFlags.NonPublic | BindingFlags.Static
 					)
 				)
@@ -146,9 +184,10 @@ namespace StarDio {
 		{
 			this.LastState.Value = new SDPlayer();
 			this.CurrState.Value = new SDPlayer();
+			StarDio.Paused = false;
 
-			AllData temp = ModEntry.All;
-			ModEntry.All = null;
+			AllData temp = StarDio.All;
+			StarDio.All = null;
 
 			if (!Context.IsMultiplayer) {
 				return;
@@ -157,9 +196,9 @@ namespace StarDio {
 				return;
 			}
 
-			ModEntry.All = temp;
-			if (ModEntry.All == null) {
-				ModEntry.All = new AllData();
+			StarDio.All = temp;
+			if (StarDio.All == null) {
+				StarDio.All = new AllData();
 			}
 		}
 
@@ -168,7 +207,24 @@ namespace StarDio {
 			this.LastState.ResetAllScreens();
 			this.CurrState.ResetAllScreens();
 
-			ModEntry.All = null;
+			StarDio.All = null;
+		}
+
+		private void SendClientUpdate()
+		{
+			ClientUpdate msg = new ClientUpdate(
+				this.CurrState.Value.InSkullCavern,
+				this.CurrState.Value.CanPause
+			);
+			this.Helper.Multiplayer.SendMessage(msg, "CU", modIDs: new[] { this.ModManifest.UniqueID });
+			this.LogToChat($"[StarDio] SENT: ({this.CurrState.Value.InSkullCavern}, {this.CurrState.Value.CanPause})");
+		}
+
+		private void SendServerUpdate()
+		{
+			ServerUpdate msg = new ServerUpdate(StarDio.Paused);
+			this.Helper.Multiplayer.SendMessage(msg, "SU", modIDs: new[] { this.ModManifest.UniqueID });
+			this.LogToChat($"[StarDio] SENT: ({StarDio.Paused})");
 		}
 
 		private void UpdateAll()
@@ -176,23 +232,28 @@ namespace StarDio {
 			foreach (KeyValuePair<int, SDPlayer> plr in this.CurrState.GetActiveValues()) {
 				plr.Value.Ticked = false;
 			}
-			ModEntry.All.CanPause = true;
-			ModEntry.All.InSkullCavern = true;
+			bool couldPause = StarDio.All.CanPause;
+			bool wasInSkullCavern = StarDio.All.InSkullCavern;
+			StarDio.All.CanPause = true;
 			foreach (KeyValuePair<int, SDPlayer> plr in this.LastState.GetActiveValues()) {
 				if (!plr.Value.CanPause) {
-					ModEntry.All.CanPause = false;
+					StarDio.All.CanPause = false;
 				}
 				if (!plr.Value.InSkullCavern) {
-					ModEntry.All.InSkullCavern = false;
+					StarDio.All.InSkullCavern = false;
 				}
 			}
-			foreach (KeyValuePair<long, SDPlayer> plr in ModEntry.All.Players) {
+			foreach (KeyValuePair<long, SDPlayer> plr in StarDio.All.Players) {
 				if (!plr.Value.CanPause) {
-					ModEntry.All.CanPause = false;
+					StarDio.All.CanPause = false;
 				}
 				if (!plr.Value.InSkullCavern) {
-					ModEntry.All.InSkullCavern = false;
+					StarDio.All.InSkullCavern = false;
 				}
+			}
+			StarDio.Paused = StarDio.All.CanPause;
+			if (couldPause != StarDio.All.CanPause) {
+				this.SendServerUpdate();
 			}
 		}
 
@@ -206,9 +267,9 @@ namespace StarDio {
 				return;
 			}
 
-			if (ModEntry.All != null && !ModEntry.All.TickStarted) {
+			if (StarDio.All != null && !StarDio.All.TickStarted) {
 				UpdateAll();
-				ModEntry.All.TickStarted = true;
+				StarDio.All.TickStarted = true;
 			}
 
 			if (Game1.shouldTimePass(true) && (Game1.currentMinigame == null)) {
@@ -234,15 +295,9 @@ namespace StarDio {
 
 			this.CurrState.Value.Ticked = true;
 
-			if (ModEntry.All == null || !Context.IsOnHostComputer) {
+			if (StarDio.All == null || !Context.IsOnHostComputer) {
 				if (sendUpdate) {
-					SDMessage msg = new SDMessage(
-						this.CurrState.Value.InSkullCavern,
-						this.CurrState.Value.CanPause
-					);
-					this.Helper.Multiplayer.SendMessage(msg, "SDMessage", modIDs: new[] { this.ModManifest.UniqueID });
-
-					this.LogToChat($"[StarDio] SENT: ({this.CurrState.Value.InSkullCavern}, {this.CurrState.Value.CanPause})");
+					this.SendClientUpdate();
 				}
 				return;
 			}
@@ -253,13 +308,13 @@ namespace StarDio {
 				}
 			}
 
-			ModEntry.All.TickStarted = false;
+			StarDio.All.TickStarted = false;
 		}
 
 		private void HandlePeerConnected(object sender, PeerConnectedEventArgs evt)
 		{
-			AllData temp = ModEntry.All;
-			ModEntry.All = null;
+			AllData temp = StarDio.All;
+			StarDio.All = null;
 
 			if (evt.Peer.IsHost) {
 				return;
@@ -268,51 +323,64 @@ namespace StarDio {
 				return;
 			}
 
-			ModEntry.All = temp;
-			if (ModEntry.All == null) {
-				ModEntry.All = new AllData();
+			StarDio.All = temp;
+			if (StarDio.All == null) {
+				StarDio.All = new AllData();
 			}
 
 			if (!Context.IsMainPlayer) {
 				return;
 			}
 
-			ModEntry.All.AddPlayer(evt.Peer.PlayerID);
+			StarDio.All.AddPlayer(evt.Peer.PlayerID);
+
+			this.SendServerUpdate();
 		}
 
 		private void HandlePeerDisconnected(object sender, PeerDisconnectedEventArgs evt)
 		{
-			if (ModEntry.All == null) {
+			if (StarDio.All == null) {
 				return;
 			}
 			if (!Context.IsMultiplayer) {
-				ModEntry.All = null;
+				StarDio.All = null;
 				return;
 			}
 			if (!Context.IsMainPlayer) {
 				return;
 			}
 
-			ModEntry.All.RemovePlayer(evt.Peer.PlayerID);
+			StarDio.All.RemovePlayer(evt.Peer.PlayerID);
 		}
 
-		private void HandleModMessageReceived(object sender, ModMessageReceivedEventArgs evt)
+		private void ClientHandleMessage(object sender, ModMessageReceivedEventArgs evt)
 		{
-			if (!Context.IsMainPlayer) {
+			if (evt.Type != "SU") {
 				return;
 			}
-			if (ModEntry.All == null) {
+
+			ServerUpdate msg = evt.ReadAs<ServerUpdate>();
+			if (msg.Paused == 1) {
+				StarDio.Paused = true;
+			} else {
+				StarDio.Paused = false;
+			}
+
+			this.LogToChat($"[StarDio] RECV: ({StarDio.Paused})");
+		}
+
+		private void ServerHandleMessage(object sender, ModMessageReceivedEventArgs evt)
+		{
+			if (evt.Type != "CU") {
 				return;
 			}
-			if (evt.Type != "SDMessage" || evt.FromModID != this.ModManifest.UniqueID) {
-				return;
-			}
-			SDPlayer plr = ModEntry.All.GetPlayer(evt.FromPlayerID);
+
+			SDPlayer plr = StarDio.All.GetPlayer(evt.FromPlayerID);
 			if (plr == null) {
 				return;
 			}
 
-			SDMessage msg = evt.ReadAs<SDMessage>();
+			ClientUpdate msg = evt.ReadAs<ClientUpdate>();
 			if (msg.InSkullCavern == 1) {
 				plr.InSkullCavern = true;
 			} else {
@@ -328,19 +396,32 @@ namespace StarDio {
 			this.LogToChat($"[StarDio] RECV: ({plr.InSkullCavern}, {plr.CanPause})");
 		}
 
+		private void HandleModMessageReceived(object sender, ModMessageReceivedEventArgs evt)
+		{
+			if (evt.FromModID != this.ModManifest.UniqueID) {
+				return;
+			}
+
+			if (!Context.IsMainPlayer || StarDio.All == null) {
+				ClientHandleMessage(sender, evt);
+			} else {
+				ServerHandleMessage(sender, evt);
+			}
+		}
+
 		private static void UpdateGameClock_Prefix(GameTime time)
 		{
-			if (ModEntry.All == null || Game1.IsClient) {
+			if (StarDio.All == null || Game1.IsClient) {
 				return;
 			}
-			if (ModEntry.All.Players.Count == 0) {
+			if (StarDio.All.Players.Count == 0) {
 				return;
 			}
-			ModEntry.OldGameTimeInterval.Value = Game1.gameTimeInterval;
-			if (ModEntry.All.InSkullCavern) {
+			StarDio.OldGameTimeInterval.Value = Game1.gameTimeInterval;
+			if (StarDio.All.InSkullCavern) {
 				Game1.gameTimeInterval -= 2000;
 			}
-			if (!ModEntry.All.CanPause) {
+			if (!StarDio.All.CanPause) {
 				return;
 			}
 			if (Game1.shouldTimePass()) {
@@ -348,25 +429,55 @@ namespace StarDio {
 			}
 		}
 
+		private static bool ShouldTimePass(bool dummy)
+		{
+			return !StarDio.Paused;
+		}
+
 		private static void UpdateGameClock_Postfix(GameTime time)
 		{
-			if (ModEntry.All == null || Game1.IsClient) {
+			if (StarDio.All == null || Game1.IsClient) {
 				return;
 			}
-			if (ModEntry.All.Players.Count == 0) {
+			if (StarDio.All.Players.Count == 0) {
 				return;
 			}
-			if (ModEntry.OldGameTimeInterval.Value > 2000 &&
+			if (StarDio.OldGameTimeInterval.Value > 2000 &&
 			    Game1.gameTimeInterval == 0) {
 				return;
 			}
-			Game1.gameTimeInterval = ModEntry.OldGameTimeInterval.Value;
-			if (ModEntry.All.CanPause) {
+			Game1.gameTimeInterval = StarDio.OldGameTimeInterval.Value;
+			if (StarDio.All.CanPause) {
 				return;
 			}
 			if (Game1.shouldTimePass()) {
 				Game1.gameTimeInterval += time.ElapsedGameTime.Milliseconds;
 			}
+		}
+
+		private static IEnumerable<CodeInstruction> DayTimeMoneyBox_Draw_Transpiler(IEnumerable<CodeInstruction> instructions)
+		{
+			foreach (CodeInstruction instr in instructions) {
+				if (instr.opcode != OpCodes.Call) {
+					continue;
+				}
+				if (!(instr.operand is MethodInfo)) {
+					continue;
+				}
+				MethodInfo m = instr.operand as MethodInfo;
+				if (!m.DeclaringType.Equals(typeof(Game1))) {
+					continue;
+				}
+				if (m.Name != "shouldTimePass") {
+					continue;
+				}
+				instr.operand = typeof(StarDio).GetMethod(
+					"ShouldTimePass",
+					BindingFlags.NonPublic | BindingFlags.Static
+				);
+				break;
+			}
+			return instructions;
 		}
 
 	}
